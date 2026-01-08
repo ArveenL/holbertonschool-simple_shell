@@ -1,71 +1,43 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
 
-/**
- * main - main
- * @ac: Argument count (unused)
- * @av: Argument vector (unused)
- * @env: Environment variables
- *
- * Description:
- * Displays a prompt, waits for user input, executes commands
- * using their full path. Handles EOF (Ctrl+D).
- *
- * Return: Always 0
- */
-int main(int ac, char **av, char **env)
-{
-	char *line = NULL;
-	size_t len = 0;
-	ssize_t nread;
-	pid_t pid;
+int main(void) {
+    char *line = NULL;
+    size_t len = 0;
 
-	(void)ac;
-	(void)av;
+    while (1) {
+        printf("$ ");                    // prompt
+        if (getline(&line, &len, stdin) == -1) break; // EOF
 
-	while (1)
-	{
-		/* Display prompt */
-		write(STDOUT_FILENO, "bigoolooa1 ", 9);
+        line[strcspn(line, "\n")] = 0;   // remove newline
 
-		/* Read user input */
-		nread = getline(&line, &len, stdin);
-		if (nread == -1)
-		{
-			/* Handle EOF (Ctrl+D) */
-			write(STDOUT_FILENO, "\n", 1);
-			break;
-		}
+        char *args[64];
+        char *token = strtok(line, " ");
+        int i = 0;
+        while (token) {
+            args[i++] = token;
+            token = strtok(NULL, " ");
+        }
+        args[i] = NULL;                  // end with NULL
 
-		/* Remove trailing newline */
-		line[nread - 1] = '\0';
+        if (args[0] == NULL) continue;   // empty input
 
-		/* Ignore empty input */
-		if (line[0] == '\0')
-			continue;
+        pid_t pid = fork();
+        if (pid == 0) {                  // child
+            execvp(args[0], args);       // run command using PATH
+            perror("exec");              // if exec fails
+            exit(1);
+        } else if (pid > 0) {            // parent
+            waitpid(pid, NULL, 0);       // wait for child
+        } else {
+            perror("fork");              // fork failed
+        }
+    }
 
-		/* Create child process */
-		pid = fork();
-		if (pid == 0)
-		{
-			char *argv[] = {line, NULL};
-
-			/* Execute command */
-			execve(line, argv, env);
-
-			/* execve only returns on failure */
-			perror("./shell");
-			exit(1);
-		}
-		else
-		{
-			/* Parent waits for child */
-			wait(NULL);
-		}
-	}
-
-	free(line);
-	return (0);
+    free(line);
+    return 0;
 }
+
