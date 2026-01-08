@@ -9,9 +9,9 @@ extern char **environ;
 /**
  * main - simple shell 0.1 for Holberton
  *
- * Description: Reads a single-word command from stdin, forks a child,
- * executes the command using execve, handles errors, and loops until EOF.
- * Prints the prompt only when input is from a terminal.
+ * Description: Reads a single-word command from stdin, trims whitespace,
+ * forks a child, executes the command using execve, handles errors, and loops
+ * until EOF. Prints the prompt only when input is from a terminal.
  *
  * Return: 0 on success, or exits with 1 if execve fails
  */
@@ -28,10 +28,16 @@ int main(void)
     {
         if (isatty(STDIN_FILENO))
             printf("#cisfun$ "); /* prompt only if terminal */
+
         if (getline(&line, &len, stdin) == -1)
             break;
-        line[strcspn(line, "\n")] = 0; /* remove newline */
 
+        /* trim leading whitespace */
+        while (*line == ' ' || *line == '\t' || *line == '\n')
+            line++;
+
+        /* remove trailing newline and spaces */
+        line[strcspn(line, "\n")] = 0;
         if (line[0] == '\0') /* empty input */
             continue;
 
