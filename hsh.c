@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/wait.h>
 
 extern char **environ;
 
@@ -11,7 +10,7 @@ extern char **environ;
  *
  * Description: Reads a single-word command from stdin, forks a child,
  * executes the command using execve, handles errors, and loops until EOF.
- * No arguments, PATH search, or advanced features are implemented.
+ * Prints the prompt only when input is from a terminal.
  *
  * Return: 0 on success, or exits with 1 if execve fails
  */
@@ -26,8 +25,9 @@ int main(void)
 
     while (1)
     {
-        printf("#cisfun$ "); /* prompt */
-        if (getline(&line, &len, stdin) == -1) /* handle EOF */
+        if (isatty(STDIN_FILENO))
+            printf("#cisfun$ "); /* prompt only if terminal */
+        if (getline(&line, &len, stdin) == -1)
             break;
         line[strcspn(line, "\n")] = 0; /* remove newline */
 
