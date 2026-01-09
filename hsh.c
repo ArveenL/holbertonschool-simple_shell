@@ -17,10 +17,14 @@ int main(void)
 	ssize_t read;
 	pid_t pid;
 	char *args[2];
+	int interactive;
+
+	interactive = isatty(STDIN_FILENO);
 
 	while (1)
 	{
-		write(STDOUT_FILENO, "#cisfun$ ", 9);
+		if (interactive)
+			write(STDOUT_FILENO, "#cisfun$ ", 9);
 
 		read = getline(&line, &len, stdin);
 		if (read == -1)
