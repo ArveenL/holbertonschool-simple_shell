@@ -32,6 +32,19 @@ int is_executable(const char *path)
     return access(path, X_OK) == 0;
 }
 
+/* Concatenate dir + "/" + cmd into full_path */
+void build_path(char *dest, const char *dir, const char *cmd)
+{
+    size_t len = 0;
+
+    while (*dir)
+        dest[len++] = *dir++;
+    dest[len++] = '/';
+    while (*cmd)
+        dest[len++] = *cmd++;
+    dest[len] = '\0';
+}
+
 /* Find command in PATH */
 int find_command(char *cmd, char *full_path, size_t size)
 {
@@ -39,7 +52,7 @@ int find_command(char *cmd, char *full_path, size_t size)
     char *dir;
     char tmp[MAX_PATH];
 
-    if (strchr(cmd, '/'))
+    if (strchr(cmd, '/')) /* absolute or relative path */
     {
         if (is_executable(cmd))
         {
@@ -56,7 +69,7 @@ int find_command(char *cmd, char *full_path, size_t size)
     dir = strtok(path_env, ":");
     while (dir)
     {
-        snprintf(tmp, sizeof(tmp), "%s/%s", dir, cmd);
+        build_path(tmp, dir, cmd);
         if (is_executable(tmp))
         {
             strncpy(full_path, tmp, size - 1);
@@ -88,7 +101,6 @@ int main(void)
     char *argv[MAX_ARGS];
     char full_path[MAX_PATH];
     ssize_t nread;
-    int i;
     pid_t pid;
     int status;
 
@@ -102,7 +114,6 @@ int main(void)
 
         line[nread] = '\0';
 
-        /* Remove trailing newline if present */
         if (line[nread - 1] == '\n')
             line[nread - 1] = '\0';
 
