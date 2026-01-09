@@ -6,11 +6,7 @@
 
 extern char **environ;
 
-/**
- * is_empty - checks if a string is only spaces or tabs
- * @s: string
- * Return: 1 if empty, 0 otherwise
- */
+/* checks if line contains only spaces or tabs */
 int is_empty(char *s)
 {
 	while (*s)
@@ -22,20 +18,14 @@ int is_empty(char *s)
 	return (1);
 }
 
-/**
- * main - simple shell
- * Return: Always 0
- */
 int main(void)
 {
 	char *line = NULL;
 	size_t len = 0;
 	ssize_t read;
 	pid_t pid;
-	char *args[2];
-	int interactive;
-
-	interactive = isatty(STDIN_FILENO);
+	char *argv[2];
+	int interactive = isatty(STDIN_FILENO);
 
 	while (1)
 	{
@@ -43,7 +33,7 @@ int main(void)
 			write(STDOUT_FILENO, "#cisfun$ ", 9);
 
 		read = getline(&line, &len, stdin);
-		if (read == -1)
+		if (read == -1)   /* EOF ONLY */
 			break;
 
 		if (line[read - 1] == '\n')
@@ -55,10 +45,10 @@ int main(void)
 		pid = fork();
 		if (pid == 0)
 		{
-			args[0] = line;
-			args[1] = NULL;
-			execve(args[0], args, environ);
-			exit(EXIT_FAILURE);
+			argv[0] = line;
+			argv[1] = NULL;
+			execve(argv[0], argv, environ);
+			exit(1);
 		}
 		wait(NULL);
 	}
