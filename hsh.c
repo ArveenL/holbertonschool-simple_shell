@@ -1,67 +1,50 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
+#include <string.h>
 #include <sys/wait.h>
 
 extern char **environ;
 
 /**
- * main - simple shell 0.1 for Holberton
- *
- * Description: Reads a single-word command from stdin, trims whitespace,
- * forks a child, executes the command using execve, handles errors, and loops
- * until EOF. Prints the prompt only when input is from a terminal.
- *
- * Return: 0 on success, or exits with 1 if execve fails
+ * main - simple shell
+ * Return: Always 0
  */
 int main(void)
 {
-    char *line;
-    size_t len;
-    pid_t pid;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t read;
+	pid_t pid;
+	char *args[2];
 
-    line = NULL;
-    len = 0;
+	while (1)
+	{
+		write(STDOUT_FILENO, "#cisfun$ ", 9);
 
-    while (1)
-    {
-        if (isatty(STDIN_FILENO))
-            printf("#cisfun$ "); /* prompt only if terminal */
+		read = getline(&line, &len, stdin);
+		if (read == -1)
+			break;
 
-        if (getline(&line, &len, stdin) == -1)
-            break;
+		if (line[read - 1] == '\n')
+			line[read - 1] = '\0';
 
-        /* trim leading whitespace */
-        while (*line == ' ' || *line == '\t' || *line == '\n')
-            line++;
+		if (*line == '\0')
+			continue;
 
-        /* remove trailing newline and spaces */
-        line[strcspn(line, "\n")] = 0;
-        if (line[0] == '\0') /* empty input */
-            continue;
+		pid = fork();
+		if (pid == 0)
+		{
+			args[0] = line;
+			args[1] = NULL;
+			execve(args[0], args, environ);
+			perror("execve");
+			exit(EXIT_FAILURE);
+		}
+		wait(NULL);
+	}
 
-        pid = fork();
-        if (pid == 0) /* child */
-        {
-            char *args[2];
-            args[0] = line;
-            args[1] = NULL;
-            execve(args[0], args, environ); /* run command */
-            perror("./shell"); /* execve failed */
-            exit(1);
-        }
-        else if (pid > 0) /* parent */
-        {
-            wait(NULL); /* wait for child */
-        }
-        else /* fork failed */
-        {
-            perror("fork");
-        }
-    }
-
-    free(line);
-    return (0);
+	free(line);
+	return (0);
 }
 
