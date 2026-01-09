@@ -1,127 +1,137 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/wait.h>
 
+#define MAX_LINE 1024
 #define MAX_ARGS 64
 #define MAX_PATH 1024
 
 extern char **environ;
 
-/* check if line is only spaces or tabs */
-int is_empty(char *s)
+/* Get PATH environment variable manually */
+int get_path_env(char *buf, size_t size)
 {
-	while (*s)
-	{
-		if (*s != ' ' && *s != '\t')
-			return 0;
-		s++;
-	}
-	return 1;
+    int i = 0;
+
+    while (environ[i])
+    {
+        if (strncmp(environ[i], "PATH=", 5) == 0)
+        {
+            strncpy(buf, environ[i] + 5, size - 1);
+            buf[size - 1] = '\0';
+            return 1;
+        }
+        i++;
+    }
+    return 0;
 }
 
-/* split line into argv */
-void build_argv(char *line, char **argv)
+/* Check if file exists and is executable */
+int is_executable(const char *path)
 {
-	int i = 0;
-	char *token = strtok(line, " \t");
-
-	while (token && i < MAX_ARGS - 1)
-	{
-		argv[i++] = token;
-		token = strtok(NULL, " \t");
-	}
-	argv[i] = NULL;
+    return access(path, X_OK) == 0;
 }
 
-/* search PATH for command if not absolute */
-int find_in_path(char *cmd, char *full_path)
+/* Find full path for command */
+int find_command(char *cmd, char *full_path, size_t size)
 {
-	char *path_env = getenv("PATH");
-	char *dir, *tmp;
-	if (!path_env)
-		return 0;
+    char path_env[MAX_PATH];
+    char *dir;
+    char tmp[MAX_PATH];
 
-	tmp = strdup(path_env);
-	if (!tmp)
-		return 0;
+    /* If command has /, use as-is */
+    if (strchr(cmd, '/'))
+    {
+        if (is_executable(cmd))
+        {
+            strncpy(full_path, cmd, size - 1);
+            full_path[size - 1] = '\0';
+            return 1;
+        }
+        return 0;
+    }
 
-	dir = strtok(tmp, ":");
-	while (dir)
-	{
-		snprintf(full_path, MAX_PATH, "%s/%s", dir, cmd);
-		if (access(full_path, X_OK) == 0)
-		{
-			free(tmp);
-			return 1;
-		}
-		dir = strtok(NULL, ":");
-	}
+    if (!get_path_env(path_env, sizeof(path_env)))
+        return 0;
 
-	free(tmp);
-	return 0;
+    dir = strtok(path_env, ":");
+    while (dir)
+    {
+        snprintf(tmp, sizeof(tmp), "%s/%s", dir, cmd);
+        if (is_executable(tmp))
+        {
+            strncpy(full_path, tmp, size - 1);
+            full_path[size - 1] = '\0';
+            return 1;
+        }
+        dir = strtok(NULL, ":");
+    }
+
+    return 0;
+}
+
+/* Parse input line into arguments */
+int parse_line(char *line, char **argv)
+{
+    int argc = 0;
+    char *token = strtok(line, " \t\n");
+
+    while (token && argc < MAX_ARGS - 1)
+    {
+        argv[argc++] = token;
+        token = strtok(NULL, " \t\n");
+    }
+    argv[argc] = NULL;
+    return argc;
 }
 
 int main(void)
 {
-	char *line = NULL;
-	size_t len = 0;
-	ssize_t read;
-	pid_t pid;
-	char *argv[MAX_ARGS];
-	char full_path[MAX_PATH];
-	int interactive = isatty(STDIN_FILENO);
+    char line[MAX_LINE];
+    char *argv[MAX_ARGS];
+    char full_path[MAX_PATH];
+    pid_t pid;
+    int status;
 
-	while (1)
-	{
-		if (interactive)
-			write(STDOUT_FILENO, ":) ", 3);
+    while (1)
+    {
+        printf(":) ");
+        fflush(stdout);
 
-		read = getline(&line, &len, stdin);
-		if (read == -1)
-			break;
+        if (!fgets(line, sizeof(line), stdin))
+            break;
 
-		if (line[read - 1] == '\n')
-			line[read - 1] = '\0';
+        if (parse_line(line, argv) == 0)
+            continue;
 
-		if (*line == '\0' || is_empty(line))
-			continue;
+        /* Find full path, skip fork if command not found */
+        if (!find_command(argv[0], full_path, sizeof(full_path)))
+        {
+            fprintf(stderr, "%s: command not found\n", argv[0]);
+            continue;
+        }
 
-		build_argv(line, argv);
-		if (!argv[0])
-			continue;
+        pid = fork();
+        if (pid < 0)
+        {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        }
 
-		/* check if command contains '/' or needs PATH search */
-		if (strchr(argv[0], '/'))
-		{
-			if (access(argv[0], X_OK) != 0)
-			{
-				perror(argv[0]);
-				continue;
-			}
-			strncpy(full_path, argv[0], MAX_PATH);
-		}
-		else
-		{
-			if (!find_in_path(argv[0], full_path))
-			{
-				fprintf(stderr, "%s: command not found\n", argv[0]);
-				continue;
-			}
-		}
+        if (pid == 0)
+        {
+            execve(full_path, argv, environ);
+            perror("execve");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            waitpid(pid, &status, 0);
+        }
+    }
 
-		pid = fork();
-		if (pid == 0)
-		{
-			execve(full_path, argv, environ);
-			perror("execve");
-			exit(1);
-		}
-		wait(NULL);
-	}
-
-	free(line);
-	return 0;
+    return 0;
 }
 
