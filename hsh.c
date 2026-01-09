@@ -1,7 +1,6 @@
-#include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/wait.h>
 
 #define MAX_LINE 1024
@@ -10,11 +9,10 @@
 
 extern char **environ;
 
-/* Get PATH environment variable manually */
+/* Get PATH manually */
 int get_path_env(char *buf, size_t size)
 {
     int i = 0;
-
     while (environ[i])
     {
         if (strncmp(environ[i], "PATH=", 5) == 0)
@@ -28,20 +26,19 @@ int get_path_env(char *buf, size_t size)
     return 0;
 }
 
-/* Check if file exists and is executable */
+/* Check if file is executable */
 int is_executable(const char *path)
 {
     return access(path, X_OK) == 0;
 }
 
-/* Find full path for command */
+/* Find command in PATH */
 int find_command(char *cmd, char *full_path, size_t size)
 {
     char path_env[MAX_PATH];
     char *dir;
     char tmp[MAX_PATH];
 
-    /* If command has /, use as-is */
     if (strchr(cmd, '/'))
     {
         if (is_executable(cmd))
@@ -68,16 +65,14 @@ int find_command(char *cmd, char *full_path, size_t size)
         }
         dir = strtok(NULL, ":");
     }
-
     return 0;
 }
 
-/* Parse input line into arguments */
+/* Parse line into arguments */
 int parse_line(char *line, char **argv)
 {
     int argc = 0;
     char *token = strtok(line, " \t\n");
-
     while (token && argc < MAX_ARGS - 1)
     {
         argv[argc++] = token;
@@ -92,46 +87,49 @@ int main(void)
     char line[MAX_LINE];
     char *argv[MAX_ARGS];
     char full_path[MAX_PATH];
+    ssize_t nread;
+    int i;
     pid_t pid;
     int status;
 
     while (1)
     {
-        printf(":) ");
-        fflush(stdout);
+        write(1, ":) ", 3);  /* Prompt */
 
-        if (!fgets(line, sizeof(line), stdin))
+        nread = read(0, line, sizeof(line) - 1);
+        if (nread <= 0)
             break;
+
+        line[nread] = '\0';
+
+        /* Remove trailing newline if present */
+        if (line[nread - 1] == '\n')
+            line[nread - 1] = '\0';
 
         if (parse_line(line, argv) == 0)
             continue;
 
-        /* Find full path, skip fork if command not found */
         if (!find_command(argv[0], full_path, sizeof(full_path)))
         {
-            fprintf(stderr, "%s: command not found\n", argv[0]);
+            write(2, "command not found\n", 18);
             continue;
         }
 
         pid = fork();
         if (pid < 0)
-        {
-            perror("fork");
-            exit(EXIT_FAILURE);
-        }
+            exit(1);
 
         if (pid == 0)
         {
             execve(full_path, argv, environ);
-            perror("execve");
-            exit(EXIT_FAILURE);
+            write(2, "execve failed\n", 14);
+            exit(1);
         }
         else
         {
             waitpid(pid, &status, 0);
         }
     }
-
     return 0;
 }
 
