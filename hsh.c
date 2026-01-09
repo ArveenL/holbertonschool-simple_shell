@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 
 #define MAX_ARGS 64
+#define MAX_PATH 1024
 
 extern char **environ;
 
@@ -14,10 +15,10 @@ int is_empty(char *s)
 	while (*s)
 	{
 		if (*s != ' ' && *s != '\t')
-			return (0);
+			return 0;
 		s++;
 	}
-	return (1);
+	return 1;
 }
 
 /* split line into argv */
@@ -34,6 +35,34 @@ void build_argv(char *line, char **argv)
 	argv[i] = NULL;
 }
 
+/* search PATH for command if not absolute */
+int find_in_path(char *cmd, char *full_path)
+{
+	char *path_env = getenv("PATH");
+	char *dir, *tmp;
+	if (!path_env)
+		return 0;
+
+	tmp = strdup(path_env);
+	if (!tmp)
+		return 0;
+
+	dir = strtok(tmp, ":");
+	while (dir)
+	{
+		snprintf(full_path, MAX_PATH, "%s/%s", dir, cmd);
+		if (access(full_path, X_OK) == 0)
+		{
+			free(tmp);
+			return 1;
+		}
+		dir = strtok(NULL, ":");
+	}
+
+	free(tmp);
+	return 0;
+}
+
 int main(void)
 {
 	char *line = NULL;
@@ -41,12 +70,13 @@ int main(void)
 	ssize_t read;
 	pid_t pid;
 	char *argv[MAX_ARGS];
+	char full_path[MAX_PATH];
 	int interactive = isatty(STDIN_FILENO);
 
 	while (1)
 	{
 		if (interactive)
-			write(STDOUT_FILENO, "#cisfun$ ", 9);
+			write(STDOUT_FILENO, ":) ", 3);
 
 		read = getline(&line, &len, stdin);
 		if (read == -1)
@@ -62,10 +92,29 @@ int main(void)
 		if (!argv[0])
 			continue;
 
+		/* check if command contains '/' or needs PATH search */
+		if (strchr(argv[0], '/'))
+		{
+			if (access(argv[0], X_OK) != 0)
+			{
+				perror(argv[0]);
+				continue;
+			}
+			strncpy(full_path, argv[0], MAX_PATH);
+		}
+		else
+		{
+			if (!find_in_path(argv[0], full_path))
+			{
+				fprintf(stderr, "%s: command not found\n", argv[0]);
+				continue;
+			}
+		}
+
 		pid = fork();
 		if (pid == 0)
 		{
-			execve(argv[0], argv, environ);
+			execve(full_path, argv, environ);
 			perror("execve");
 			exit(1);
 		}
@@ -73,6 +122,6 @@ int main(void)
 	}
 
 	free(line);
-	return (0);
+	return 0;
 }
 
