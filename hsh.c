@@ -1,68 +1,63 @@
 #include <stdio.h>   /* printf, perror */
-#include <stdlib.h>  /* exit, free */
-#include <unistd.h>  /* fork, execve */
+#include <stdlib.h>  /* exit, malloc, free */
+#include <unistd.h>  /* fork, execve, access */
 #include <string.h>  /* strlen */
-#include <sys/wait.h> /* waitpid */
 
-/**
- * main - simple UNIX command line interpreter
- *
- * Return: 0 on success
- */
+extern char **environ;  /* needed for execve */
+
 int main(void)
 {
-	char *line = NULL;
-	size_t len = 0;
-	ssize_t nread;
+    char *line;
+    size_t len;
+    ssize_t nread;
+    pid_t pid;
+    int status;
 
-	while (1) /* infinite loop → shell stays alive */
-	{
-		pid_t child_pid;
-		int status;
-		char *argv[2];
-		extern char **environ;
+    line = NULL;
+    len = 0;
 
-		printf("$ "); /* display prompt */
-		nread = getline(&line, &len, stdin); /* read input from user */
+    while (1) /* infinite loop → shell stays alive */
+    {
+        printf("$ "); /* show prompt */
+        nread = getline(&line, &len, stdin); /* read input */
 
-		if (nread == -1) /* EOF (Ctrl+D) */
-		{
-			printf("\n");
-			break; /* exit shell loop */
-		}
+        if (nread == -1) /* EOF (Ctrl+D) */
+        {
+            printf("\n");
+            break; /* exit shell */
+        }
 
-		/* remove newline at the end */
-		if (line[nread - 1] == '\n')
-			line[nread - 1] = '\0';
+        /* remove newline at the end */
+        if (line[nread - 1] == '\n')
+            line[nread - 1] = '\0';
 
-		if (line[0] == '\0') /* empty command, just continue */
-			continue;
+        pid = fork();
+        if (pid == -1)
+        {
+            perror("fork");
+            continue;
+        }
 
-		child_pid = fork(); /* create child process */
-		if (child_pid == -1) /* fork error */
-		{
-			perror("fork");
-			continue;
-		}
+        if (pid == 0) /* child process */
+        {
+            char *argv[2];
+            argv[0] = line;  /* command typed */
+            argv[1] = NULL;
 
-		if (child_pid == 0) /* child process */
-		{
-			argv[0] = line;
-			argv[1] = NULL;
+            if (access(line, X_OK) == 0) /* executable exists */
+                execve(line, argv, environ);
+            else
+                printf("Error: No such file or directory\n");
 
-			execve(line, argv, environ); /* execute command */
+            exit(EXIT_FAILURE); /* if execve fails */
+        }
+        else /* parent process */
+        {
+            wait(&status);
+        }
+    }
 
-			/* if execve returns, there was an error */
-			perror("Error");
-			exit(EXIT_FAILURE);
-		}
-		else /* parent process */
-		{
-			waitpid(child_pid, &status, 0); /* wait for child to finish */
-		}
-	}
-
-	free(line);
-	return (0);
+    free(line);
+    return 0;
 }
 
